@@ -100,6 +100,8 @@ function findBestMatch(input: string): FAQItem | null {
   return bestMatch;
 }
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "";
+
 const GREETING_TEXT = "ここまでで、特に気になる点やご不明点はございますでしょうか。";
 const APP_TITLE = "AIヘルプデスク 案内ロボット";
 const APP_SUBTITLE = "AIヘルプデスクに関するご質問にお答えします";
@@ -238,9 +240,9 @@ function App() {
     [ttsEnabled, speechRate, speechPitch, speechVolume, getSelectedVoice]
   );
 
-  // 質問を処理して回答する
+  // 質問を処理して回答する（LLMバックエンドAPI経由）
   const handleQuestion = useCallback(
-    (question: string) => {
+    async (question: string) => {
       if (!question.trim()) return;
 
       const userMsg: ChatMessage = {
@@ -249,21 +251,7 @@ function App() {
         text: question.trim(),
       };
 
-      const match = findBestMatch(question);
-      const answerText = match
-        ? match.answer
-        : "確認が必要なため、AICの担当者に引き継ぎます。";
-
-      const assistantMsg: ChatMessage = {
-        id: messageIdRef.current++,
-        role: "assistant",
-        text: answerText,
-      };
-
-      setMessages((prev) => [...prev, userMsg, assistantMsg]);
-      setInputText("");
-
-      // 回答を音声で読み上げる（即座にマイクを停止してから読み上げ）
+      // 即座にマイクを停止
       pendingSpeakRef.current = true;
       if (recognitionRef.current) {
         try { recognitionRef.current.stop(); } catch { /* ignore */ }
@@ -271,6 +259,50 @@ function App() {
       }
       setIsListening(false);
       setInterimTranscript("");
+
+      let answerText: string;
+
+      if (BACKEND_URL) {
+        // LLMバックエンドAPIを呼び出す
+        setMessages((prev) => [...prev, userMsg]);
+        setInputText("");
+        try {
+          const res = await fetch(`${BACKEND_URL}/api/ask`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ question: question.trim() }),
+          });
+          const data = await res.json();
+          answerText = data.answer || "確認が必要なため、AICの担当者に引き継ぎます。";
+        } catch {
+          // API呼び出し失敗時はローカルFAQにフォールバック
+          const match = findBestMatch(question);
+          answerText = match
+            ? match.answer
+            : "確認が必要なため、AICの担当者に引き継ぎます。";
+        }
+        const assistantMsg: ChatMessage = {
+          id: messageIdRef.current++,
+          role: "assistant",
+          text: answerText,
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+      } else {
+        // バックエンド未設定時はローカルFAQマッチング
+        const match = findBestMatch(question);
+        answerText = match
+          ? match.answer
+          : "確認が必要なため、AICの担当者に引き継ぎます。";
+        const assistantMsg: ChatMessage = {
+          id: messageIdRef.current++,
+          role: "assistant",
+          text: answerText,
+        };
+        setMessages((prev) => [...prev, userMsg, assistantMsg]);
+        setInputText("");
+      }
+
+      // 回答を音声で読み上げる
       setTimeout(() => {
         pendingSpeakRef.current = false;
         speakText(answerText);
