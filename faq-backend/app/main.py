@@ -1,8 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from openai import AzureOpenAI
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -82,6 +85,10 @@ FAQ_CONTEXT = "\n".join(
 )
 
 
+# Static files directory (frontend build output)
+STATIC_DIR = Path(__file__).parent.parent / "static"
+
+
 class QuestionRequest(BaseModel):
     question: str
 
@@ -135,3 +142,17 @@ async def ask_question(request: QuestionRequest):
             answer="申し訳ございません。システムに一時的な問題が発生しております。しばらくしてからもう一度お試しください。",
             source="fallback"
         )
+
+
+# Serve frontend static files (SPA fallback)
+if STATIC_DIR.exists():
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        file_path = STATIC_DIR / full_path
+        if file_path.is_file():
+            return FileResponse(file_path)
+        # SPA fallback: return index.html for all non-file routes
+        index_path = STATIC_DIR / "index.html"
+        if index_path.exists():
+            return FileResponse(index_path)
+        return {"error": "not found"}
