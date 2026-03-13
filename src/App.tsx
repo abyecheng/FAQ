@@ -101,6 +101,7 @@ function findBestMatch(input: string): FAQItem | null {
 }
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "";
+const BACKEND_AUTH = import.meta.env.VITE_BACKEND_AUTH || "";
 
 const GREETING_TEXT = "ここまでで、特に気になる点やご不明点はございますでしょうか。";
 const APP_TITLE = "AIヘルプデスク 案内ロボット";
@@ -267,9 +268,13 @@ function App() {
         setMessages((prev) => [...prev, userMsg]);
         setInputText("");
         try {
+          const headers: Record<string, string> = { "Content-Type": "application/json" };
+          if (BACKEND_AUTH) {
+            headers["Authorization"] = `Basic ${BACKEND_AUTH}`;
+          }
           const res = await fetch(`${BACKEND_URL}/api/ask`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers,
             body: JSON.stringify({ question: question.trim() }),
           });
           const data = await res.json();
