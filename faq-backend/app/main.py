@@ -1,8 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from openai import AzureOpenAI
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -64,22 +67,25 @@ FAQ_DATA = [
 
 SYSTEM_PROMPT = """あなたは「AIヘルプデスク（Microsoft Teams上で動作するクラウドサービス）」に関する案内ロボットです。
 
-以下のFAQデータに基づいて、お客様の質問に丁寧かつ自然な日本語で回答してください。
+以下の知識を参考にして、お客様の質問に自分の言葉で自然に回答してください。
 
-【回答ルール】
-1. FAQデータに関連する情報がある場合は、その内容を基に自然な口語調で回答してください。箇条書きではなく、話し言葉で説明してください。
-2. FAQデータに該当する情報がない場合は、必ず「確認が必要なため、AICの担当者に引き継ぎます。」と回答してください。
-3. 回答は簡潔にしつつも、丁寧で親しみやすい口調を心がけてください。
-4. 「はい、〜についてですね。」のような前置きを入れて、自然な会話の流れを作ってください。
-5. 回答は音声で読み上げられるため、読みやすく自然な文章にしてください。長すぎないようにしてください。
+【重要ルール】
+1. 以下の知識データはあくまで参考情報です。テキストをそのままコピーして回答しないでください。内容を理解した上で、自分の言葉で噛み砕いて、会話として自然な日本語で説明してください。
+2. 知識データに該当する情報がない質問には、必ず正確に「確認が必要なため、AICの担当者に引き継ぎます。」とだけ回答してください。この文以外のことは言わないでください。
+3. 丁寧で親しみやすい口調を心がけ、話し言葉で回答してください。
+4. 回答は音声で読み上げられるため、短く簡潔にしてください。箇条書きは使わず、自然な文章にしてください。
 
-【FAQデータ】
+【参考知識データ】
 """
 
 # Build FAQ context
 FAQ_CONTEXT = "\n".join(
     [f"Q{i+1}: {faq['question']}\nA{i+1}: {faq['answer']}\n" for i, faq in enumerate(FAQ_DATA)]
 )
+
+
+# Static files directory (frontend build output)
+STATIC_DIR = Path(__file__).parent.parent / "static"
 
 
 class QuestionRequest(BaseModel):
@@ -135,3 +141,17 @@ async def ask_question(request: QuestionRequest):
             answer="申し訳ございません。システムに一時的な問題が発生しております。しばらくしてからもう一度お試しください。",
             source="fallback"
         )
+
+
+# Serve frontend static files (SPA fallback)
+if STATIC_DIR.exists():
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        file_path = STATIC_DIR / full_path
+        if file_path.is_file():
+            return FileResponse(file_path)
+        # SPA fallback: return index.html for all non-file routes
+        index_path = STATIC_DIR / "index.html"
+        if index_path.exists():
+            return FileResponse(index_path)
+        return {"error": "not found"}

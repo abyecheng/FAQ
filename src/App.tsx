@@ -101,6 +101,7 @@ function findBestMatch(input: string): FAQItem | null {
 }
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "";
+const BACKEND_AUTH = import.meta.env.VITE_BACKEND_AUTH || "";
 
 const GREETING_TEXT = "ここまでで、特に気になる点やご不明点はございますでしょうか。";
 const APP_TITLE = "AIヘルプデスク 案内ロボット";
@@ -262,45 +263,35 @@ function App() {
 
       let answerText: string;
 
-      if (BACKEND_URL) {
-        // LLMバックエンドAPIを呼び出す
-        setMessages((prev) => [...prev, userMsg]);
-        setInputText("");
-        try {
-          const res = await fetch(`${BACKEND_URL}/api/ask`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ question: question.trim() }),
-          });
-          const data = await res.json();
-          answerText = data.answer || "確認が必要なため、AICの担当者に引き継ぎます。";
-        } catch {
-          // API呼び出し失敗時はローカルFAQにフォールバック
-          const match = findBestMatch(question);
-          answerText = match
-            ? match.answer
-            : "確認が必要なため、AICの担当者に引き継ぎます。";
+      // LLMバックエンドAPIを呼び出す（同一オリジンまたは外部URL）
+      const apiUrl = BACKEND_URL ? `${BACKEND_URL}/api/ask` : "/api/ask";
+      setMessages((prev) => [...prev, userMsg]);
+      setInputText("");
+      try {
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (BACKEND_AUTH) {
+          headers["Authorization"] = `Basic ${BACKEND_AUTH}`;
         }
-        const assistantMsg: ChatMessage = {
-          id: messageIdRef.current++,
-          role: "assistant",
-          text: answerText,
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
-      } else {
-        // バックエンド未設定時はローカルFAQマッチング
+        const res = await fetch(apiUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ question: question.trim() }),
+        });
+        const data = await res.json();
+        answerText = data.answer || "確認が必要なため、AICの担当者に引き継ぎます。";
+      } catch {
+        // API呼び出し失敗時はローカルFAQにフォールバック
         const match = findBestMatch(question);
         answerText = match
           ? match.answer
           : "確認が必要なため、AICの担当者に引き継ぎます。";
-        const assistantMsg: ChatMessage = {
-          id: messageIdRef.current++,
-          role: "assistant",
-          text: answerText,
-        };
-        setMessages((prev) => [...prev, userMsg, assistantMsg]);
-        setInputText("");
       }
+      const assistantMsg: ChatMessage = {
+        id: messageIdRef.current++,
+        role: "assistant",
+        text: answerText,
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
 
       // 回答を音声で読み上げる
       setTimeout(() => {

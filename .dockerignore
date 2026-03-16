@@ -1,0 +1,11 @@
+node_modules
+dist
+dist-ssr
+.git
+.env.local
+*.local
+faq-backend/.env
+faq-backend/.venv
+faq-backend/__pycache__
+faq-backend/app/__pycache__
+faq-backend/static

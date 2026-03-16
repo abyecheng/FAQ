@@ -1,0 +1,10 @@
+services:
+  faq-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./faq-backend/.env
+    restart: unless-stopped
